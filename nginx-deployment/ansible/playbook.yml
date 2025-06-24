@@ -1,0 +1,96 @@
+- name: Deploy Nginx on EKS and expose via public and private load balancers
+  hosts: localhost
+  connection: local
+  gather_facts: no
+
+  vars:
+    kubeconfig_path: ~/.kube/config
+
+  tasks:
+    - name: Apply Nginx deployment
+      community.kubernetes.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        src: files/nginx-deployment.yaml
+        state: present
+
+    - name: Create Nginx public service (ELB)
+      community.kubernetes.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: nginx-public
+            annotations:
+              service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+          spec:
+            selector:
+              app: nginx
+            type: LoadBalancer
+            ports:
+              - port: 80
+                targetPort: 80
+
+    - name: Create Nginx private service (Internal ELB)
+      community.kubernetes.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: nginx-private
+            annotations:
+              service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+          spec:
+            selector:
+              app: nginx
+            type: LoadBalancer
+            ports:
+              - port: 80
+                targetPort: 80
+
+
+- name: Create Nginx public service (HTTPS)
+  community.kubernetes.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: nginx-public
+        annotations:
+          service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+          service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:ap-south-1:123456789012:certificate/abcde-12345"
+          service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
+          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+      spec:
+        selector:
+          app: nginx
+        type: LoadBalancer
+        ports:
+          - name: https
+            port: 443
+            targetPort: 80
+
+
+- name: Create Nginx private service (HTTPS internal)
+  community.kubernetes.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: nginx-private
+        annotations:
+          service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+          service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:ap-south-1:123456789012:certificate/fghij-67890"
+          service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
+          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+      spec:
+        selector:
+          app: nginx
+        type: LoadBalancer
+        ports:
+          - name: https
+            port: 443
+            targetPort: 80
